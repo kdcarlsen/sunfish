@@ -21,6 +21,7 @@ import pathlib
 
 import sunfish
 import tools
+import randomfish
 
 ###############################################################################
 # Playing test

@@ -5,6 +5,7 @@ from __future__ import print_function
 import re, sys, time
 from itertools import count
 from collections import namedtuple
+from random import randrange
 
 ###############################################################################
 # Piece-Square tables. Tune these to change sunfish's behaviour
@@ -205,24 +206,14 @@ class Position(namedtuple('Position', 'board score wc bc ep kp')):
     def value(self, move):
         i, j = move # i = pos where we are, j = pos we are going
         p, q = self.board[i], self.board[j] # i = piece where we are, j = piece where we are going
+        
         # Actual move
-        score = pst[p][j] - pst[p][i]
-        # Capture
-        if q.islower():
-            score += pst[q.upper()][119-j] # if we are capturing a piece, add its value to our score
-        # Castling check detection
-        if abs(j-self.kp) < 2:
-            score += pst['K'][119-j]
-        # Castling
-        if p == 'K' and abs(i-j) == 2:
-            score += pst['R'][(i+j)//2]
-            score -= pst['R'][A1 if j < i else H1]
-        # Special pawn stuff
-        if p == 'P':
-            if A8 <= j <= H8:
-                score += pst['Q'][j] - pst['P'][j]
-            if j == self.ep:
-                score += pst['P'][119-(j+S)]
+        score = randrange(MATE_LOWER - 1) # some random value that doesn't win us the game
+
+        # Check if we happened to capture the king
+        if q.islower() and q == 'K':
+            score = MATE_UPPER # need to set to mate_upper if we are capturing the king so the game ends
+        
         return score
 
 ###############################################################################
@@ -353,25 +344,13 @@ class Searcher:
 
         # In finished games, we could potentially go far enough to cause a recursion
         # limit exception. Hence we bound the ply.
+        best = -MATE_UPPER
         for depth in range(1, 1000):
-            # The inner loop is a binary search on the score of the position.
-            # Inv: lower <= score <= upper
-            # 'while lower != upper' would work, but play tests show a margin of 20 plays
-            # better.
-            lower, upper = -MATE_UPPER, MATE_UPPER
-            while lower < upper - EVAL_ROUGHNESS:
-                gamma = (lower+upper+1)//2
-                score = self.bound(pos, gamma, depth)
-                if score >= gamma:
-                    lower = score
-                if score < gamma:
-                    upper = score
-            # We want to make sure the move to play hasn't been kicked out of the table,
-            # So we make another call that must always fail high and thus produce a move.
-            self.bound(pos, lower, depth)
-            # If the game hasn't finished we can retrieve our move from the
-            # transposition table.
-            yield depth, self.tp_move.get(pos), self.tp_score.get((pos, depth, True)).lower
+            for move in pos.gen_moves():
+                score = pos.value(move)
+                if score > best:
+                    best = score
+                    yield depth, move, score
 
 
 ###############################################################################
